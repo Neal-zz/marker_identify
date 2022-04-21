@@ -5,16 +5,16 @@
 
 
 int main() {
-	cv::Mat leftSrc = cv::imread("../img/id123.png",0);  // CV_8UC1
+	cv::Mat leftSrc = cv::imread("../img/test3.jpg",0);  // CV_8UC1
 	
 	std::vector<cv::Point2f> points;
 	float pR;
 	bool success = find8Points(leftSrc, points, pR);
 
-	//if (!success) {
-	//	std::cout << "can't find 8 points!" << std::endl;
-	//	return 0;
-	//}
+	if (!success) {
+		std::cout << "can't find 8 points!" << std::endl;
+		return 0;
+	}
 
 	PatternContainer pc = distinguish8Points(points, pR);
 

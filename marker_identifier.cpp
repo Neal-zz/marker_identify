@@ -8,7 +8,7 @@ bool find8Points(cv::Mat& image, std::vector<cv::Point2f>& result, float& pR) {
 	cv::GaussianBlur(image, image, cv::Size(5, 5), 0);
 
 	cv::Mat imgBin(image.rows, image.cols, CV_8UC1);
-	cv::threshold(image, imgBin, 180, 255, cv::THRESH_BINARY);
+	cv::threshold(image, imgBin, 150, 255, cv::THRESH_BINARY);  // TODO...
 
 	cv::Mat element = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));
 	cv::morphologyEx(imgBin, imgBin, cv::MORPH_OPEN, element);  // eliminate while noise in black region.
@@ -19,100 +19,152 @@ bool find8Points(cv::Mat& image, std::vector<cv::Point2f>& result, float& pR) {
 
 	std::vector<std::vector<cv::Point>> contours;
 	cv::findContours(imgEdge, contours, cv::RETR_LIST, cv::CHAIN_APPROX_NONE);
-	imgEdge = cv::Scalar::all(0);
 
-	// overlap contour erasing.
-	// if two contours' area is similar, and distance is small, then erase one of them.
-	std::vector<std::vector<cv::Point>> contoursUpdated0;
+	// find the rectangle
+	/*imgEdge = cv::Scalar::all(0);*/
+	std::vector<std::vector<cv::Point>> contoursRect;
 	for (int i = 0; i < contours.size(); i++) {
-		cv::RotatedRect boxi = cv::fitEllipse(contours[i]);
-		double areai = cv::contourArea(contours[i]);
-		bool unique = 1;
-		for (const auto& cUj : contoursUpdated0) {
-			cv::RotatedRect boxj = cv::fitEllipse(cUj);
-			if ((pow(boxi.center.x - boxj.center.x, 2) + pow(boxi.center.y - boxj.center.y, 2)) * CV_PI < areai &&
-				abs(cv::contourArea(cUj) - areai) < areai * 0.1) {
-				unique = 0;
-			}
-		}
-		if (unique == 1) {
-			contoursUpdated0.emplace_back(contours[i]);
+		std::vector<cv::Point> c = contours[i];
+		float cLength = cv::arcLength(c, true);
+		cv::approxPolyDP(c, c, 0.02 * cLength, true);
+		if (c.size() == 4 && cLength > 800 && cv::isContourConvex(c)) {
+			contoursRect.emplace_back(c);
+			//cv::drawContours(imgEdge, contours, i, cv::Scalar::all(100));
 		}
 	}
 
-	// contour area voting. too big or too small area is erased.
-	int candidate = -1;
-	for (int i = 0; i < contoursUpdated0.size(); i++) {
-		double area_i = cv::contourArea(contoursUpdated0[i]);
-		int voteNum = 0;
-
-		for (int j = 0; j < contoursUpdated0.size(); j++) {
-			double area_j = cv::contourArea(contoursUpdated0[j]);
-			if (area_j / area_i < areaPortion && area_i / area_j < areaPortion) {
-				voteNum++;
-			}
-		}
-		
-		if (voteNum >= 8) {
-			candidate = i;
-			break;
-		}
-	}
-	if (candidate == -1) {
-		return false;
-	}
-
-	// update contours1.
-	std::vector<std::vector<cv::Point>> contoursUpdated1;
-	float areaCan = cv::contourArea(contoursUpdated0[candidate]);
-	for (int i = 0; i < contoursUpdated0.size(); i++) {
-		float area_i = cv::contourArea(contoursUpdated0[i]);
-		if (areaCan / area_i < areaPortion && area_i / areaCan < areaPortion) {
-			contoursUpdated1.emplace_back(contoursUpdated0.at(i));
-		}
-	}
-
-	// distance voting. too far away points are erased.
-	candidate = -1;
-	//float ppDistance = sqrt(areaCan / CV_PI) * 8;  // r*8
-	const float ppRadius = sqrt(areaCan / CV_PI) * 10;  // radius
-	for (int i = 0; i < contoursUpdated1.size(); i++) {
-		cv::RotatedRect boxi = cv::fitEllipse(contoursUpdated1[i]);
-
-		int supporters = 0;
-		for (const auto& cj : contoursUpdated1) {
-			cv::RotatedRect boxj = cv::fitEllipse(cj);
-			if ((pow(boxi.center.x - boxj.center.x, 2) + pow(boxi.center.y - boxj.center.y, 2)) < ppRadius*ppRadius) {
-				supporters++;
-			}
-		}
-		if (supporters == 8) {
-			candidate = i;
-			break;
-		}
-	}
-	if (candidate == -1) {
-		return false;
-	}
-
-	// update contours2.
+	// try to find 8 points in the rectangle. 
 	std::vector<std::vector<cv::Point>> contoursUpdated2;
-	cv::RotatedRect boxCan = cv::fitEllipse(contoursUpdated1[candidate]);
-	for (int i = 0; i < contoursUpdated1.size(); i++) {
-		cv::RotatedRect box_i = cv::fitEllipse(contoursUpdated1[candidate]);
-		if ((pow(box_i.center.x - boxCan.center.x, 2) + pow(box_i.center.y - boxCan.center.y, 2)) < ppRadius * ppRadius) {
-			contoursUpdated2.emplace_back(contoursUpdated1.at(i));
+	cv::Mat roi;
+	for (const auto& cR : contoursRect) {
+		int minx = std::min({ cR[0].x, cR[1].x, cR[2].x, cR[3].x });
+		int miny = std::min({ cR[0].y, cR[1].y, cR[2].y, cR[3].y });
+		int maxx = std::max({ cR[0].x, cR[1].x, cR[2].x, cR[3].x });
+		int maxy = std::max({ cR[0].y, cR[1].y, cR[2].y, cR[3].y });
+		roi = imgEdge(cv::Rect(minx, miny, maxx - minx, maxy - miny));
+
+		//// adaptive threshold
+		//int maxPixel = 0;
+		//int minPixel = 255;
+		//for (int i = 0; i < roi.rows; i++)
+		//{
+		//	for (int j = 0; j < roi.cols; j++)
+		//	{
+		//		int index = i * roi.cols + j;
+		//		int data = (int)roi.data[index];
+		//		if (data > maxPixel) {
+		//			maxPixel = data;
+		//		}
+		//		if (data < minPixel) {
+		//			minPixel = data;
+		//		}
+		//	}
+		//}
+		//cv::threshold(roi, roi, (maxPixel*0.5+minPixel*0.5), 255, cv::THRESH_BINARY);
+		//cv::morphologyEx(roi, roi, cv::MORPH_OPEN, element);  // eliminate while noise in black region.
+		//cv::morphologyEx(roi, roi, cv::MORPH_CLOSE, element);  // eliminate black noise in white region.
+		//cv::Canny(roi, roi, 50.0, 50.0 * 2);
+
+		std::vector<std::vector<cv::Point>> contoursInRect;
+		cv::findContours(roi, contoursInRect, cv::RETR_LIST, cv::CHAIN_APPROX_NONE);
+
+		// overlap contour erasing.
+	    // if two contours' area is similar, and distance is small, then erase one of them.
+		std::vector<std::vector<cv::Point>> contoursUpdated0;
+		for (int i = 0; i < contoursInRect.size(); i++) {
+			cv::RotatedRect boxi = cv::fitEllipse(contoursInRect[i]);
+			double areai = cv::contourArea(contoursInRect[i]);
+			bool unique = 1;
+			for (const auto& cUj : contoursUpdated0) {
+				cv::RotatedRect boxj = cv::fitEllipse(cUj);
+				if ((pow(boxi.center.x - boxj.center.x, 2) + pow(boxi.center.y - boxj.center.y, 2)) * CV_PI < areai &&
+					abs(cv::contourArea(cUj) - areai) < areai * 0.1) {
+					unique = 0;
+				}
+			}
+			if (unique == 1) {
+				contoursUpdated0.emplace_back(contoursInRect[i]);
+			}
 		}
+
+		// contour area voting. too big or too small area is erased.
+		int candidate = -1;
+		for (int i = 0; i < contoursUpdated0.size(); i++) {
+			double area_i = cv::contourArea(contoursUpdated0[i]);
+			if (area_i < 300) {
+				continue;
+			}
+			int voteNum = 0;
+
+			for (int j = 0; j < contoursUpdated0.size(); j++) {
+				double area_j = cv::contourArea(contoursUpdated0[j]);
+				if (area_j / area_i < areaPortion && area_i / area_j < areaPortion) {
+					voteNum++;
+				}
+			}
+
+			if (voteNum >= 8) {
+				candidate = i;
+				break;
+			}
+		}
+		if (candidate == -1) {
+			continue;
+		}
+
+		// update contours1.
+		std::vector<std::vector<cv::Point>> contoursUpdated1;
+		float areaCan = cv::contourArea(contoursUpdated0[candidate]);
+		for (int i = 0; i < contoursUpdated0.size(); i++) {
+			float area_i = cv::contourArea(contoursUpdated0[i]);
+			if (areaCan / area_i < areaPortion && area_i / areaCan < areaPortion) {
+				contoursUpdated1.emplace_back(contoursUpdated0.at(i));
+			}
+		}
+
+		// distance voting. too far away points are erased.
+		candidate = -1;
+		//float ppDistance = sqrt(areaCan / CV_PI) * 8;  // r*8
+		const float ppRadius = sqrt(areaCan / CV_PI) * 10;  // radius
+		pR = sqrt(areaCan / CV_PI);
+		for (int i = 0; i < contoursUpdated1.size(); i++) {
+			cv::RotatedRect boxi = cv::fitEllipse(contoursUpdated1[i]);
+
+			int supporters = 0;
+			for (const auto& cj : contoursUpdated1) {
+				cv::RotatedRect boxj = cv::fitEllipse(cj);
+				if ((pow(boxi.center.x - boxj.center.x, 2) + pow(boxi.center.y - boxj.center.y, 2)) < ppRadius * ppRadius) {
+					supporters++;
+				}
+			}
+			if (supporters == 8) {
+				candidate = i;
+				break;
+			}
+		}
+		if (candidate == -1) {
+			continue;
+		}
+
+		// all criterias are met. Then update contours2.
+		cv::RotatedRect boxCan = cv::fitEllipse(contoursUpdated1[candidate]);
+		for (int i = 0; i < contoursUpdated1.size(); i++) {
+			cv::RotatedRect box_i = cv::fitEllipse(contoursUpdated1[candidate]);
+			if ((pow(box_i.center.x - boxCan.center.x, 2) + pow(box_i.center.y - boxCan.center.y, 2)) < ppRadius * ppRadius) {
+				contoursUpdated2.emplace_back(contoursUpdated1.at(i));
+			}
+		}
+		break;
 	}
 
-	//std::cout << contoursUpdated2.size() << std::endl;
-	pR = sqrt(areaCan / CV_PI);
+
+	if (contoursUpdated2.size() != 8) {
+		return false;
+	}
 	// draw the results
+	roi = cv::Scalar::all(0);
 	for (int i = 0; i < contoursUpdated2.size(); i++)
 	{
-		// at least 6 points.
-		if (contoursUpdated2[i].size() < 6)
-			return false;
 
 		// fit ellipse
 		//double area_i = cv::contourArea(contoursUpdated[i]);
@@ -123,17 +175,17 @@ bool find8Points(cv::Mat& image, std::vector<cv::Point2f>& result, float& pR) {
 		//	continue;
 
 		// draw the ellipse
-		cv::drawContours(imgEdge, contoursUpdated2, i, cv::Scalar::all(100));
-		cv::ellipse(imgEdge, box, cv::Scalar::all(255));
+		//cv::drawContours(imgOut, contoursUpdated2, i, cv::Scalar::all(100));
+		cv::ellipse(roi, box, cv::Scalar::all(255));
 
 		result.emplace_back(cv::Point2f(box.center.x, box.center.y));
 	}
 
-	cv::imshow("left Gaussian", image);
-	cv::imshow("left Binary", imgBin);
-	cv::imshow("left Edge", imgEdge);
+	//cv::imshow("left Gaussian", image);
+	//cv::imshow("left Binary", imgBin);
+	//cv::imshow("left Edge", imgEdge);
 
-	cv::waitKey(1);
+	//cv::waitKey(0);
 
 	return true;
 }
