@@ -342,5 +342,25 @@ PatternContainer distinguish8Points(const std::vector<cv::Point2f>& pointsIn, co
 	return pointsOut;
 }
 
+bool crossCheck(const PatternContainer& leftPoints,	const PatternContainer& rightPoints, const float leftPR, const float rightPR) {
+	if (fabs(leftPR - rightPR) > leftPR * 0.1) {
+		std::cout << "croosCheck fail: condition0..." << std::endl;
+		return false;
+	}
+	float PR = leftPR * 0.5 + rightPR * 0.5;
 
+	if (fabs(leftPoints.p1.y - rightPoints.p1.y) > PR ||
+		fabs(leftPoints.p2.y - rightPoints.p2.y) > PR || 
+		fabs(leftPoints.p3.y - rightPoints.p3.y) > PR || 
+		fabs(leftPoints.p4.y - rightPoints.p4.y) > PR || 
+		fabs(leftPoints.p5.y - rightPoints.p5.y) > PR || 
+		fabs(leftPoints.p6.y - rightPoints.p6.y) > PR || 
+		fabs(leftPoints.p7.y - rightPoints.p7.y) > PR || 
+		fabs(leftPoints.p8.y - rightPoints.p8.y) > PR) {
+		std::cout << "croosCheck fail: condition1..." << std::endl;
+		return false;
+	}
+
+	return true;
+}
 

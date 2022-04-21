@@ -83,7 +83,7 @@ bool find8Points(cv::Mat& image, std::vector<cv::Point2f>& result, float& pR);
 
 PatternContainer distinguish8Points(const std::vector<cv::Point2f>& pointsIn, const float pR);
 
-
+bool crossCheck(const PatternContainer& leftPoints, const PatternContainer& rightPoints, const float leftPR, const float rightPR);
 
 
 
