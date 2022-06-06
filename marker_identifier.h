@@ -1,6 +1,6 @@
 #pragma once
 #include <opencv2/opencv.hpp>
-
+#include <math.h>
 
 struct PatternContainer {
 	PatternContainer()
@@ -79,11 +79,17 @@ struct PatternContainer {
 	cv::Point2f p8;
 };
 
-bool find8Points(cv::Mat& image, std::vector<cv::Point2f>& result, float& pR);
+void findSquares(const cv::Mat& image, std::vector<std::vector<cv::Point>>& squares);
+
+bool find8Points(const cv::Mat& image, std::vector<std::vector<cv::Point2f>>& result, std::vector<float>& pR,
+	std::vector<int>& minx, std::vector<int>& miny, std::vector<int>& maxx, std::vector<int>& maxy);
 
 PatternContainer distinguish8Points(const std::vector<cv::Point2f>& pointsIn, const float pR);
 
-bool crossCheck(const PatternContainer& leftPoints, const PatternContainer& rightPoints, const float leftPR, const float rightPR);
+std::vector<int> crossCheck(std::vector<PatternContainer>& leftPoints, std::vector<PatternContainer>& rightPoints);
 
+std::vector<cv::Point3f> uv2xyz(const std::vector<cv::Point2f>& lPts, const std::vector<cv::Point2f>& rPts,
+	const cv::Mat& cameraMatrixl, const cv::Mat& distCoeffsl,
+	const cv::Mat& cameraMatrixr, const cv::Mat& distCoeffsr, const cv::Mat& T2);
 
-
+bool markerIdentify(const cv::Mat& leftSrc, const cv::Mat& rightSrc, std::vector<int>& markerId, std::vector<cv::Mat>& Tcam_marker);

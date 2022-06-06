@@ -2,117 +2,112 @@
 
 #include <opencv2/opencv.hpp>
 
-const cv::Mat cameraMatrixl = (cv::Mat_<float>(3, 3) <<
-	3.6893312873969357e+03, 0., 1.2276919951156651e+03,
-	0.,	3.7213916883471502e+03, 1.0259843160683670e+03,
-	0., 0., 1.);
-const cv::Mat cameraMatrixr = (cv::Mat_<float>(3, 3) <<
-	3.6893312873969357e+03, 0., 1.2146499586267064e+03,
-	0.,	3.7213916883471502e+03, 1.0229887294201624e+03,
-	0., 0., 1.);
-const cv::Mat distCoeffsl = (cv::Mat_<float>(1, 14) <<
-	2.6414536323521552e-02, -7.6172971269805689e-01, 0., 0., 0.,
-	0., 0., -4.8543545578704244e+00, 0., 0., 0., 0., 0., 0.);
-const cv::Mat distCoeffsr = (cv::Mat_<float>(1, 14) <<
-	1.5009905154834927e-01, -4.3632973373348820e+00, 0., 0., 0.,
-	0., 0., -3.1428340823877907e+01, 0., 0., 0., 0., 0., 0.);
-const cv::Mat T2 = (cv::Mat_<float>(3, 4) <<
-	7.9686560163007181e-01, -4.9783956901361809e-03, -6.0413610098643855e-01, 1.8392840810519419e+02,
-	3.2219028565208920e-04, 9.9996940822133040e-01, -7.8152936542482329e-03, -2.1824514289170679e-01,
-	6.0415652701279621e-01, 6.0330918967586413e-03, 7.9684282808468676e-01, 6.4846659173011275e+01);
 
-std::vector<cv::Point3f> uv2xyz(const std::vector<cv::Point2f>& lPts, const std::vector<cv::Point2f>& rPts,
-	const cv::Mat& cameraMatrixl, const cv::Mat& distCoeffsl,
-	const cv::Mat& cameraMatrixr, const cv::Mat& distCoeffsr, const cv::Mat& T2) {
 
-	std::vector<cv::Point3f> pts3D;
-
+void showResult(const cv::Mat& leftSrc, const cv::Mat& rightSrc, const std::vector<cv::Mat>& Tcam_marker) {
+	/*camera parameters*/
+	const cv::Mat cameraMatrixl = (cv::Mat_<float>(3, 3) <<
+		1096.6, 0., 1004.6,
+		0., 1101.2, 547.8316,
+		0., 0., 1.);
+	const cv::Mat cameraMatrixr = (cv::Mat_<float>(3, 3) <<
+		1095.2, 0., 996.3653,
+		0., 1100.7, 572.7941,
+		0., 0., 1.);
+	const cv::Mat distCoeffsl = (cv::Mat_<float>(1, 4) <<
+		0.0757, -0.0860, -2.2134e-4, 2.4925e-4);
+	const cv::Mat distCoeffsr = (cv::Mat_<float>(1, 4) <<
+		0.0775, -0.0932, -9.2589e-4, 1.5443e-4);
+	const cv::Mat T2 = (cv::Mat_<float>(3, 4) <<
+		0.999991605633247, -0.000345422533180, 0.004082811079910, -4.049079591541234,
+		0.000333318919503, 0.999995549306528, 0.002964838213577, -0.004234103893078,
+		-0.004083817030495, -0.002963452447460, 0.999987270113001, -0.065436975906188);
 	const cv::Mat T1 = (cv::Mat_<float>(3, 4) <<
 		1., 0., 0., 0.,
 		0., 1., 0., 0.,
 		0., 0., 1., 0.);
 
-	// undistortion
-	std::vector<cv::Point2f> lPts_ud, rPts_ud;
-	cv::undistortPoints(lPts, lPts_ud, cameraMatrixl, distCoeffsl);
-	cv::undistortPoints(rPts, rPts_ud, cameraMatrixr, distCoeffsr);
-	//lPts_ud = lPts;
-	//rPts_ud = rPts;
-
-	// projection matrix: from world (left camera) coordinate, to image coordinate.
 	cv::Mat proMl(3, 4, CV_32F), proMr(3, 4, CV_32F);
 	proMl = cameraMatrixl * T1;
 	proMr = cameraMatrixr * T2;
-	cv::Mat pts4D;
-	// calculate 3D position.
-	cv::triangulatePoints(proMl, proMr, lPts_ud, rPts_ud, pts4D);
+	cv::Mat leftOut, rightOut;
+	cv::cvtColor(leftSrc, leftOut, cv::COLOR_GRAY2BGR);
+	cv::cvtColor(rightSrc, rightOut, cv::COLOR_GRAY2BGR);
+	for (int i = 0; i < Tcam_marker.size(); i++) {
+		// 3D points
+		float l0 = 5;  // length from point0 to pointx
+		cv::Point3f point0(Tcam_marker[i].at<float>(0, 3), Tcam_marker[i].at<float>(1, 3), Tcam_marker[i].at<float>(2, 3));
+		cv::Point3f pointx = point0 + l0 * cv::Point3f(Tcam_marker[i].at<float>(0, 0), Tcam_marker[i].at<float>(1, 0), Tcam_marker[i].at<float>(2, 0));
+		cv::Point3f pointy = point0 + l0 * cv::Point3f(Tcam_marker[i].at<float>(0, 1), Tcam_marker[i].at<float>(1, 1), Tcam_marker[i].at<float>(2, 1));
+		cv::Point3f pointz = point0 + l0 * cv::Point3f(Tcam_marker[i].at<float>(0, 2), Tcam_marker[i].at<float>(1, 2), Tcam_marker[i].at<float>(2, 2));
 
-	for (int i = 0; i < pts4D.cols; i++)
-	{
-		cv::Point3f pointTmp(pts4D.at<float>(0, i) / pts4D.at<float>(3, i),
-			pts4D.at<float>(1, i) / pts4D.at<float>(3, i), pts4D.at<float>(2, i) / pts4D.at<float>(3, i));
-		pts3D.push_back(pointTmp);
+		// project to image plane
+		cv::Mat point0_l(3, 1, CV_32F), point0_r(3, 1, CV_32F);
+		point0_l = proMl * (cv::Mat_<float>(4, 1) << point0.x, point0.y, point0.z, 1.0);
+		point0_r = proMr * (cv::Mat_<float>(4, 1) << point0.x, point0.y, point0.z, 1.0);
+		cv::Point2f point0_l_2d(point0_l.at<float>(0, 0) / point0_l.at<float>(2, 0), point0_l.at<float>(1, 0) / point0_l.at<float>(2, 0));
+		cv::Point2f point0_r_2d(point0_r.at<float>(0, 0) / point0_r.at<float>(2, 0), point0_r.at<float>(1, 0) / point0_r.at<float>(2, 0));
+		cv::Mat pointx_l(3, 1, CV_32F), pointx_r(3, 1, CV_32F);
+		pointx_l = proMl * (cv::Mat_<float>(4, 1) << pointx.x, pointx.y, pointx.z, 1.0);
+		pointx_r = proMr * (cv::Mat_<float>(4, 1) << pointx.x, pointx.y, pointx.z, 1.0);
+		cv::Point2f pointx_l_2d(pointx_l.at<float>(0, 0) / pointx_l.at<float>(2, 0), pointx_l.at<float>(1, 0) / pointx_l.at<float>(2, 0));
+		cv::Point2f pointx_r_2d(pointx_r.at<float>(0, 0) / pointx_r.at<float>(2, 0), pointx_r.at<float>(1, 0) / pointx_r.at<float>(2, 0));
+		cv::Mat pointy_l(3, 1, CV_32F), pointy_r(3, 1, CV_32F);
+		pointy_l = proMl * (cv::Mat_<float>(4, 1) << pointy.x, pointy.y, pointy.z, 1.0);
+		pointy_r = proMr * (cv::Mat_<float>(4, 1) << pointy.x, pointy.y, pointy.z, 1.0);
+		cv::Point2f pointy_l_2d(pointy_l.at<float>(0, 0) / pointy_l.at<float>(2, 0), pointy_l.at<float>(1, 0) / pointy_l.at<float>(2, 0));
+		cv::Point2f pointy_r_2d(pointy_r.at<float>(0, 0) / pointy_r.at<float>(2, 0), pointy_r.at<float>(1, 0) / pointy_r.at<float>(2, 0));
+		cv::Mat pointz_l(3, 1, CV_32F), pointz_r(3, 1, CV_32F);
+		pointz_l = proMl * (cv::Mat_<float>(4, 1) << pointz.x, pointz.y, pointz.z, 1.0);
+		pointz_r = proMr * (cv::Mat_<float>(4, 1) << pointz.x, pointz.y, pointz.z, 1.0);
+		cv::Point2f pointz_l_2d(pointz_l.at<float>(0, 0) / pointz_l.at<float>(2, 0), pointz_l.at<float>(1, 0) / pointz_l.at<float>(2, 0));
+		cv::Point2f pointz_r_2d(pointz_r.at<float>(0, 0) / pointz_r.at<float>(2, 0), pointz_r.at<float>(1, 0) / pointz_r.at<float>(2, 0));
+
+		cv::line(leftOut, point0_l_2d, pointx_l_2d, cv::Scalar(0, 0, 255), 2);
+		cv::line(leftOut, point0_l_2d, pointy_l_2d, cv::Scalar(0, 255, 0), 2);
+		cv::line(leftOut, point0_l_2d, pointz_l_2d, cv::Scalar(255, 0, 0), 2);
+		cv::line(rightOut, point0_r_2d, pointx_r_2d, cv::Scalar(0, 0, 255), 2);
+		cv::line(rightOut, point0_r_2d, pointy_r_2d, cv::Scalar(0, 255, 0), 2);
+		cv::line(rightOut, point0_r_2d, pointz_r_2d, cv::Scalar(255, 0, 0), 2);
 	}
 
-	return pts3D;
+
+	cv::imshow("left", leftOut);
+	cv::imshow("right", rightOut);
+	cv::waitKey(0);
 }
 
 int main() {
-	cv::Mat leftSrc = cv::imread("left.png",0);  // CV_8UC1
-	cv::Mat rightSrc = cv::imread("right.png", 0);  // CV_8UC1
+	cv::Mat leftSrc = cv::imread("test0.jpg",0);  // CV_8UC1
+	cv::Mat rightSrc = cv::imread("test1.jpg", 0);  // CV_8UC1
 	
-	std::vector<cv::Point2f> leftPoints, rightPoints;
-	float leftPR, rightPR;
-	bool leftSuccess = find8Points(leftSrc, leftPoints, leftPR);
-	bool rightSuccess = find8Points(rightSrc, rightPoints, rightPR);
-	if (!leftSuccess || !rightSuccess || fabs(leftPR - rightPR) > leftPR * 0.1) {
-		std::cout << "can't find 8 points!" << std::endl;
-		return 0;
+	//cv::Mat image;
+	//leftSrc = leftSrc;
+	//cv::medianBlur(leftSrc, leftSrc, 5);
+	//cv::boxFilter(leftSrc, image, -1, cv::Size(21, 21));
+	//image = leftSrc - image;
+	//float thresh = 0.04;
+	//cv::Mat out;
+	//out = image > thresh;
+	//cv::imshow("ss", out);
+	//cv::waitKey(0);
+
+	std::vector<int> markerId;
+	std::vector<cv::Mat> Tcam_marker;
+	bool success = markerIdentify(leftSrc, rightSrc, markerId, Tcam_marker);
+
+	if (success) {
+		for (int i = 0; i < markerId.size(); i++) {
+			std::cout << "current marker: " << markerId[i] << std::endl;
+			std::cout << "Tcam_marker: " << Tcam_marker[i] << std::endl;
+		}
+	}
+	else {
+		std::cout << "fail..." << std::endl;
 	}
 
-	PatternContainer leftPC = distinguish8Points(leftPoints, leftPR);
-	PatternContainer rightPC = distinguish8Points(rightPoints, rightPR);
 
-	bool success = crossCheck(leftPC, rightPC, leftPR, rightPR);
-	if (!success || leftPC.getId()!=rightPC.getId()) {
-		std::cout << "8 points found wrong!" << std::endl;
-		return 0;
-	}
-	std::cout << "current marker: " << leftPC.getId() << std::endl;
-	//std::cout << pc.p1 << std::endl;
-	//std::cout << pc.p2 << std::endl;
-	//std::cout << pc.p3 << std::endl;
-	//std::cout << pc.p4 << std::endl;
-	//std::cout << pc.p5 << std::endl;
-	//std::cout << pc.p6 << std::endl;
-	//std::cout << pc.p7 << std::endl;
-	//std::cout << pc.p8 << std::endl;
-
-	std::vector<cv::Point2f> lPts, rPts;
-	lPts.emplace_back(leftPC.p1);
-	lPts.emplace_back(leftPC.p3);
-	lPts.emplace_back(leftPC.p4);
-	rPts.emplace_back(rightPC.p1);
-	rPts.emplace_back(rightPC.p3);
-	rPts.emplace_back(rightPC.p4);
-	std::vector<cv::Point3f> pts3D = uv2xyz(lPts, rPts, cameraMatrixl, distCoeffsl, cameraMatrixr, distCoeffsr, T2);
-	
-	//std::cout << pts3D[0] << std::endl;
-	//std::cout << pts3D[1] << std::endl;
-	//std::cout << pts3D[2] << std::endl;
-
-	// calculate Tcam_marker.
-	cv::Point3f xCoor = (pts3D[1] - pts3D[0]) / norm(pts3D[1] - pts3D[0]);
-	cv::Point3f yCoor = (pts3D[2] - pts3D[0]) / norm(pts3D[2] - pts3D[0]);
-	cv::Point3f zCoor = xCoor.cross(yCoor);
-	zCoor /= norm(zCoor);
-	yCoor = zCoor.cross(xCoor);
-	yCoor /= norm(yCoor);
-	cv::Mat Tcam_marker = (cv::Mat_<float>(4, 4) <<
-		xCoor.x, yCoor.x, zCoor.x, pts3D[0].x,
-		xCoor.y, yCoor.y, zCoor.y, pts3D[0].y,
-		xCoor.z, yCoor.z, zCoor.z, pts3D[0].z,
-		0.0, 0.0, 0.0, 1.0);
+	showResult(leftSrc, rightSrc, Tcam_marker);
 
 	return 0;
 }
